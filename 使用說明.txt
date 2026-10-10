@@ -1,0 +1,27 @@
+格致數位閱讀館 V12.2｜公開書櫃動態翻頁（分階段測試）
+
+重要：這份 ZIP 包含兩個不同用途的檔案！不要把它們全部貼到同一個 GAS。
+
+第一階段：獨立「公開唯讀 API」GAS 專案
+1. 先備份該專案原本的 PublicReadOnly.gs。
+2. 用本包的 PublicReadOnly.gs 取代該公開 API 專案的程式碼。
+3. 保留指令碼屬性 SHEET_ID；以「我」身分執行，權限「任何人」，更新原有的部署版本（不要新增新的網址）。
+4. 此次新增 DriveApp 讀取圖片，Google 可能要求重新授權 Drive 權限。只在自己的公開 API 專案授權。
+5. 第一輪不要把 PDF 草稿發布，先測試原本 API：<原API網址>?callback=test 應回傳 ok:true。
+6. 管理後台中的 PDF 草稿，若確認不含敏感內容，可以用現有「發布」按鈕上架。
+7. API ?callback=test 應出現 mode:pdf、pageCount:4。
+8. 測試圖片：<原API網址>?action=page&id=<PDF刊物uuid>&page=0&callback=test
+   成功應有 ok:true、mime:image/jpeg、base64:很長的內容。不要貼整串 base64 回聊天室。
+
+第二階段：GitHub Pages
+1. 確認上面 API 的兩項測試成功後才更新 GitHub。
+2. 備份原有 index.html。用新 index.html 取代 GitHub 根目錄的同名檔案。
+3. 不用重傳 assets，因為 V9 的範例圖片與 PDF 沒改；ZIP 的 assets 只是備份。
+4. 等 GitHub Pages 更新後重新整理閱讀館。新刊物會有封面縮圖，點擊會載入四張圖片並翻頁。
+
+重要注意
+* Drive 圖片沒有對所有人分享，API 只讀取已 published 的刊物頁面；不外洩 fileId。
+* 下架後 API 將拒絕新讀取，但讀者此前已下載、截圖或瀏覽器快取的圖片無法收回。
+* 此版每次閱讀透過 GAS 依頁取圖片，可能較慢且有 Apps Script 額度限制，適合小規模試行。若流量增加，下一版應轉為正式靜態圖片託管/CDN。
+* 上方原有新增/編輯區塊只支援外部網址刊物；PDF 請使用已建立的草稿，並透過清單發布。
+* 若遇到「API 權限不足」請停在第一階段，勿更動 GitHub。

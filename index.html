@@ -39,11 +39,81 @@ function loadPublications(){
  document.head.appendChild(script);
 }
 
+
+// V12.2：公開 API 僅回傳「已發布」刊物。圖片用 JSONP 逐張下載，不公開私人 Drive 資料夾。
+const pageCache=new Map();
+function apiJsonp(params){
+ return new Promise((resolve,reject)=>{
+  const callback='gjPage_'+Date.now()+'_'+Math.random().toString(36).slice(2,9);
+  const el=document.createElement('script');let finished=false;
+  function finish(err,data){if(finished)return;finished=true;clearTimeout(timer);delete window[callback];el.remove();err?reject(err):resolve(data)}
+  const timer=setTimeout(()=>finish(Error('公開 API 讀取逾時')),30000);
+  window[callback]=result=>finish(null,result);
+  el.onerror=()=>finish(Error('公開 API 無法連線'));
+  el.src=PUBLIC_API_URL+(PUBLIC_API_URL.includes('?')?'&':'?')+new URLSearchParams({...params,callback});
+  document.head.appendChild(el);
+ });
+}
+async function pageUrl(id,index){
+ const key=id+':'+index;if(pageCache.has(key))return pageCache.get(key);
+ const r=await apiJsonp({action:'page',id,page:String(index)});
+ if(!r||!r.ok||!r.base64)throw Error(r?.error||'圖片無法讀取');
+ const url='data:image/jpeg;base64,'+r.base64;pageCache.set(key,url);return url;
+}
+function coverThumbnails(){
+ document.querySelectorAll('[data-cloud-cover]').forEach(async el=>{
+  let id=el.getAttribute('data-cloud-cover');
+  if(!id||el.dataset.loaded==='yes')return;
+  el.dataset.loaded='yes';
+  try{const src=await pageUrl(id,0);if(el.isConnected){const img=document.createElement('img');img.src=src;img.alt='刊物封面';el.replaceChildren(img)}}
+  catch(e){console.warn('封面載入失敗',e);el.dataset.loaded='no'}
+ });
+}
+async function openCloudReader(item){
+ overlay.classList.add('open');overlay.classList.remove('controls-hidden');document.body.classList.add('lock');
+ document.getElementById('counter').textContent='正在下載翻頁圖片…';
+ document.querySelector('.readerTop strong').textContent=item.title;
+ document.querySelector('.readerTop span').textContent=item.issue||item.category||'';
+ const link=document.querySelector('.readerBar a');link.style.display='none';
+ try{
+  const count=Number(item.pageCount);
+  if(!Number.isInteger(count)||count<1||count>100)throw Error('刊物頁數異常');
+  const srcs=[];
+  for(let i=0;i<count;i++){
+    document.getElementById('counter').textContent='載入第 '+(i+1)+' / '+count+' 頁…';
+    srcs.push(await pageUrl(item.id,i));
+  }
+  if(!overlay.classList.contains('open'))return;
+  await showBook(srcs);
+  scheduleControls();
+ }catch(e){document.getElementById('counter').textContent='開啟失敗：'+(e.message||String(e));console.error(e)}
+}
+async function showBook(srcs){
+ if(!window.St?.PageFlip)throw Error('翻頁引擎載入失敗');
+ if(flip){flip.destroy();flip=null}
+ const book=document.getElementById('book');book.replaceChildren();
+ for(let i=0;i<srcs.length;i++){const p=document.createElement('div');p.className='page';const im=document.createElement('img');im.src=srcs[i];im.alt='第 '+(i+1)+' 版';p.appendChild(im);book.appendChild(p)}
+ const first=book.querySelector('img');
+ await new Promise((resolve,reject)=>{if(first.complete&&first.naturalWidth)return resolve();first.onload=resolve;first.onerror=()=>reject(Error('圖片無法顯示'))});
+ const ratio=first.naturalHeight/first.naturalWidth;
+ const w=485,h=Math.min(1100,Math.max(346,Math.round(485*ratio)));
+ flip=new St.PageFlip(book,{width:w,height:h,size:'stretch',minWidth:230,maxWidth:w,minHeight:Math.round(h*230/w),maxHeight:h,showCover:true,drawShadow:true,maxShadowOpacity:.65,flippingTime:1000,usePortrait:true,startPage:0,autoSize:true,mobileScrollSupport:false,showPageCorners:true,disableFlipByClick:false});
+ flip.loadFromHTML(book.querySelectorAll('.page'));flip.on('flip',update);
+ update();
+}
+
 let category='全部',flip=null;const shelf=document.getElementById('shelf');const placeholder=[['研習手冊','研習手冊'],['圖書館館訊','圖書館館訊'],['輔導刊物','輔導刊物']];
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function safeUrl(s){try{let u=new URL(s,location.href);return u.protocol==='https:'||u.origin===location.origin?u.href:''}catch(e){return ''}}
-function render(){const q=document.getElementById('search').value.trim().toLowerCase();const all=[...seed,...extra.filter(x=>x.status==='published')];const matching=all.filter(x=>(category==='全部'||x.category===category)&&[x.title,x.category,x.description,x.date].join(' ').toLowerCase().includes(q));shelf.innerHTML=matching.map(x=>{const cover=safeUrl(x.cover);return `<article class="publication"><div class="coverWrap">${cover?`<img src="${esc(cover)}" alt="${esc(x.title)}封面">`:`<div style="background:#dce6e2;padding:25px;text-align:center;min-height:200px;display:grid;place-items:center;color:#254b49"><strong>${esc(x.category)}<br>${esc(x.title)}</strong></div>`}</div><div class="pubText"><div class="meta">${esc(x.category)} · ${esc(x.date)}</div><h3>${esc(x.title)}</h3><p>${esc(x.description)}</p><button class="readBtn" data-id="${esc(x.id)}">${x.mode==='link'?'前往原處室網站 ↗':'開啟翻頁電子書 ↗'}</button></div></article>`}).join('');if(category==='全部'&&!q)shelf.innerHTML+=placeholder.filter(p=>!all.some(x=>x.category===p[0])).map(x=>`<div class="placeholder"><div class="symbol">▤</div><strong>${x[0]}</strong><p style="font-size:12px">預留刊物分類<br>可由管理示範新增</p></div>`).join('');if(!matching.length)shelf.innerHTML='<div class="empty">此分類目前尚無已發布刊物。</div>';shelf.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>{const x=all.find(z=>z.id===b.dataset.id);if(x.mode==='link'){const url=safeUrl(x.url);if(url)window.open(url,'_blank','noopener,noreferrer');else alert('網址不正確')}else if(x.sample)openReader();else alert('PDF 翻頁轉換將在正式後台串接，此版先測試刊物發布與外部連結。')})}
-document.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{category=b.dataset.category;document.querySelectorAll('[data-category]').forEach(n=>n.classList.toggle('active',n===b));render()});document.getElementById('search').addEventListener('input',render);const overlay=document.getElementById('overlay');function update(){if(!flip)return;const i=flip.getCurrentPageIndex();document.getElementById('counter').textContent=i===0?'封面 · 第 1 版':i>=3?'封底 · 第 4 版':'第 2–3 版 · 跨頁'}function openReader(){overlay.classList.add('open');overlay.classList.remove('controls-hidden');document.body.classList.add('lock');if(!window.St?.PageFlip){document.getElementById('counter').textContent='無法載入翻頁引擎，請檢查網路';return}if(!flip){flip=new St.PageFlip(document.getElementById('book'),{width:485,height:729,size:'stretch',minWidth:230,maxWidth:485,minHeight:346,maxHeight:729,showCover:true,drawShadow:true,maxShadowOpacity:.65,flippingTime:1000,usePortrait:true,startPage:0,autoSize:true,mobileScrollSupport:false,showPageCorners:true,disableFlipByClick:false});flip.loadFromHTML(document.querySelectorAll('.page'));flip.on('flip',update)}else{flip.update();}update()}const fsButton=document.getElementById('fullscreen');
+function render(){const q=document.getElementById('search').value.trim().toLowerCase();const all=[...seed,...extra.filter(x=>x.status==='published')];const matching=all.filter(x=>(category==='全部'||x.category===category)&&[x.title,x.category,x.description,x.date].join(' ').toLowerCase().includes(q));shelf.innerHTML=matching.map(x=>{const cover=safeUrl(x.cover);return `<article class="publication"><div class="coverWrap">${cover?`<img src="${esc(cover)}" alt="${esc(x.title)}封面">`:`<div ${x.mode==='pdf'&&!x.sample?`data-cloud-cover="${esc(x.id)}"`: ''} style="background:#dce6e2;padding:25px;text-align:center;min-height:200px;display:grid;place-items:center;color:#254b49"><strong>${esc(x.category)}<br>${esc(x.title)}</strong></div>`}</div><div class="pubText"><div class="meta">${esc(x.category)} · ${esc(x.date)}</div><h3>${esc(x.title)}</h3><p>${esc(x.description)}</p><button class="readBtn" data-id="${esc(x.id)}">${x.mode==='link'?'前往原處室網站 ↗':'開啟翻頁電子書 ↗'}</button></div></article>`}).join('');if(category==='全部'&&!q)shelf.innerHTML+=placeholder.filter(p=>!all.some(x=>x.category===p[0])).map(x=>`<div class="placeholder"><div class="symbol">▤</div><strong>${x[0]}</strong><p style="font-size:12px">預留刊物分類<br>可由管理示範新增</p></div>`).join('');if(!matching.length)shelf.innerHTML='<div class="empty">此分類目前尚無已發布刊物。</div>';coverThumbnails();shelf.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>{const x=all.find(z=>z.id===b.dataset.id);if(x.mode==='link'){const url=safeUrl(x.url);if(url)window.open(url,'_blank','noopener,noreferrer');else alert('網址不正確')}else if(x.sample)openReader();else openCloudReader(x)})}
+document.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{category=b.dataset.category;document.querySelectorAll('[data-category]').forEach(n=>n.classList.toggle('active',n===b));render()});document.getElementById('search').addEventListener('input',render);const overlay=document.getElementById('overlay');function update(){if(!flip)return;const i=flip.getCurrentPageIndex();document.getElementById('counter').textContent=i===0?'封面 · 第 1 版':i>=3?'封底 · 第 4 版':'第 2–3 版 · 跨頁'}function openReader(){
+ overlay.classList.add('open');overlay.classList.remove('controls-hidden');document.body.classList.add('lock');
+ document.querySelector('.readerTop strong').textContent='格致青年 · 2026 年 4 月號';
+ document.querySelector('.readerTop span').textContent='創校 64 週年特刊';
+ document.querySelector('.readerBar a').style.display='';
+ showBook(['assets/page1.jpg','assets/page2.jpg','assets/page3.jpg','assets/page4.jpg']).catch(e=>document.getElementById('counter').textContent='載入失敗：'+e.message);
+}
+const fsButton=document.getElementById('fullscreen');
 function syncFullscreen(){const active=document.fullscreenElement===overlay||document.webkitFullscreenElement===overlay;fsButton.textContent=active?'⛶ 退出全螢幕':'⛶ 全螢幕';fsButton.setAttribute('aria-pressed',String(active));setTimeout(()=>{try{flip?.update()}catch(e){console.warn('翻頁尺寸更新失敗',e)}},120)}
 async function toggleFullscreen(){try{if(document.fullscreenElement===overlay||document.webkitFullscreenElement===overlay){if(document.exitFullscreen)await document.exitFullscreen();else if(document.webkitExitFullscreen)document.webkitExitFullscreen()}else{if(overlay.requestFullscreen)await overlay.requestFullscreen();else if(overlay.webkitRequestFullscreen)overlay.webkitRequestFullscreen();else alert('此瀏覽器不支援網頁全螢幕，仍可使用一般閱讀模式。')}}catch(e){console.warn('全螢幕切換失敗',e);alert('瀏覽器未允許全螢幕，請試試其他瀏覽器。')}}
 fsButton.onclick=toggleFullscreen;document.addEventListener('fullscreenchange',syncFullscreen);document.addEventListener('webkitfullscreenchange',syncFullscreen);
