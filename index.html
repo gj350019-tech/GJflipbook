@@ -62,11 +62,25 @@ async function pageUrl(id,index){
 }
 function coverThumbnails(){
  document.querySelectorAll('[data-cloud-cover]').forEach(async el=>{
-  let id=el.getAttribute('data-cloud-cover');
+  const id=el.getAttribute('data-cloud-cover');
   if(!id||el.dataset.loaded==='yes')return;
   el.dataset.loaded='yes';
-  try{const src=await pageUrl(id,0);if(el.isConnected){const img=document.createElement('img');img.src=src;img.alt='刊物封面';el.replaceChildren(img)}}
-  catch(e){console.warn('封面載入失敗',e);el.dataset.loaded='no'}
+  const label=el.querySelector('strong');
+  if(label){const hint=document.createElement('small');hint.textContent='封面載入中…';hint.style.cssText='display:block;margin-top:8px;font-size:11px';el.appendChild(hint)}
+  try{
+   const src=await pageUrl(id,0);
+   if(!el.isConnected)return;
+   const img=document.createElement('img');
+   img.alt='刊物封面';
+   img.src=src;
+   img.onerror=()=>{console.warn('封面圖片解碼失敗');img.replaceWith(el)};
+   const wrap=el.closest('.coverWrap');
+   if(wrap)wrap.replaceChildren(img);
+  }catch(e){
+   console.warn('封面載入失敗',e);
+   el.dataset.loaded='no';
+   const hint=el.querySelector('small');if(hint)hint.textContent='暫時無法載入封面';
+  }
  });
 }
 // 同時開啟或切換多本書時，僅最新一次操作可更新畫面。
@@ -147,7 +161,7 @@ async function showBook(srcs,ticket){
 
 let category='全部',flip=null,currentPageCount=0;const shelf=document.getElementById('shelf');const placeholder=[['研習手冊','研習手冊'],['圖書館館訊','圖書館館訊'],['輔導刊物','輔導刊物']];
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function safeUrl(s){try{let u=new URL(s,location.href);return u.protocol==='https:'||u.origin===location.origin?u.href:''}catch(e){return ''}}
+function safeUrl(s){const value=String(s??'').trim();if(!value)return '';try{const u=new URL(value,location.href);return u.protocol==='https:'||u.origin===location.origin?u.href:''}catch(e){return ''}}
 function render(){const q=document.getElementById('search').value.trim().toLowerCase();const all=[...seed,...extra.filter(x=>x.status==='published')];const matching=all.filter(x=>(category==='全部'||x.category===category)&&[x.title,x.category,x.description,x.date].join(' ').toLowerCase().includes(q));shelf.innerHTML=matching.map(x=>{const cover=safeUrl(x.cover);return `<article class="publication"><div class="coverWrap">${cover?`<img src="${esc(cover)}" alt="${esc(x.title)}封面">`:`<div ${x.mode==='pdf'&&!x.sample?`data-cloud-cover="${esc(x.id)}"`: ''} style="background:#dce6e2;padding:25px;text-align:center;min-height:200px;display:grid;place-items:center;color:#254b49"><strong>${esc(x.category)}<br>${esc(x.title)}</strong></div>`}</div><div class="pubText"><div class="meta">${esc(x.category)} · ${esc(formatIssue(x.date))}</div><h3>${esc(x.title)}</h3><p>${esc(x.description)}</p><button class="readBtn" data-id="${esc(x.id)}">${x.mode==='link'?'前往原處室網站 ↗':'開啟翻頁電子書 ↗'}</button></div></article>`}).join('');if(category==='全部'&&!q)shelf.innerHTML+=placeholder.filter(p=>!all.some(x=>x.category===p[0])).map(x=>`<div class="placeholder"><div class="symbol">▤</div><strong>${x[0]}</strong><p style="font-size:12px">預留刊物分類<br>可由管理示範新增</p></div>`).join('');if(!matching.length)shelf.innerHTML='<div class="empty">此分類目前尚無已發布刊物。</div>';coverThumbnails();shelf.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>{const x=all.find(z=>z.id===b.dataset.id);if(x.mode==='link'){const url=safeUrl(x.url);if(url)window.open(url,'_blank','noopener,noreferrer');else alert('網址不正確')}else if(x.sample)openReader();else openCloudReader(x)})}
 document.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{category=b.dataset.category;document.querySelectorAll('[data-category]').forEach(n=>n.classList.toggle('active',n===b));render()});document.getElementById('search').addEventListener('input',render);const overlay=document.getElementById('overlay');function update(){if(!flip)return;const i=flip.getCurrentPageIndex();const n=currentPageCount||1;document.getElementById('counter').textContent='第 '+(i+1)+' / '+n+' 頁'}function openReader(){
  const ticket=++readerRequest;
@@ -180,5 +194,5 @@ document.getElementById('adminEntry').onclick=()=>{
  if(ADMIN_URL.startsWith('https://'))window.open(ADMIN_URL,'_blank','noopener,noreferrer');
  else alert('尚未設定管理後台網址。請依 README 完成 Apps Script 部署。');
 };
-console.info('格致數位閱讀館 V12.2.2 公開授權與翻頁修正版已載入');render();loadPublications();
+console.info('格致數位閱讀館 V12.2.3 封面自動顯示修正版已載入');render();loadPublications();
 </script></body></html>
