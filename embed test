@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>格致數位閱讀館｜單本刊物</title>
+<title>格致數位閱讀館｜選擇刊物與單本嵌入 V2</title>
 <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js" defer></script>
 <style>
 :root{color-scheme:dark;--bg:#142333;--panel:#1d3245;--gold:#e4c18b;--line:#ffffff25}
@@ -52,13 +52,13 @@ function jsonp(query,timeout=30000){return new Promise((resolve,reject)=>{
 function state(title,detail,error=false){$('status').hidden=false;$('statusTitle').textContent=title;$('statusText').textContent=detail||'';$('spinner').hidden=error;$('retry').hidden=!error}
 function hideState(){$('status').hidden=true}
 function issue(v){const m=String(v||'').match(/^(\d{4})-(\d{2})/);return m?m[1]+'.'+m[2]:(v||'')}
-function getEmbedUrl(id){const u=new URL('embed.html',location.href);u.search='';u.hash='';u.searchParams.set('id',id);return u.href}
+function getEmbedUrl(id){const u=new URL('embed-v2.html',location.href);u.search='';u.hash='';u.searchParams.set('id',id);return u.href}
 function getEmbedHtml(id){const u=getEmbedUrl(id).replace(/&/g,'&amp;').replace(/"/g,'&quot;');return '<div style="width:100%;max-width:900px;margin:0 auto;">\n  <iframe src="'+u+'" title="格致數位閱讀館－電子刊物" style="display:block;width:100%;height:720px;border:0;border-radius:10px;background:#142333;" allow="fullscreen" allowfullscreen loading="lazy"></iframe>\n</div>'}
 async function copy(value){try{await navigator.clipboard.writeText(value);alert('已複製到剪貼簿')}catch(e){const field=$('embedCode');if(field){field.focus();field.select()}else prompt('請複製以下文字：',value)}}
 function makeButton(label,click){const b=document.createElement('button');b.type='button';b.textContent=label;b.addEventListener('click',click);return b}
 function catalog(items){document.title='選擇單本刊物｜格致數位閱讀館';$('toolbar').hidden=true;$('nav').hidden=true;$('note').hidden=true;
  $('stage').style.cssText='display:block;overflow:auto;padding:1px 0;background:#142333';$('stage').replaceChildren();
- const wrap=document.createElement('div');wrap.className='catalog';const h=document.createElement('h1');h.textContent='單本刊物嵌入測試';wrap.appendChild(h);
+ const wrap=document.createElement('div');wrap.className='catalog';const h=document.createElement('h1');h.textContent='單本刊物嵌入測試 V2';wrap.appendChild(h);
  const p=document.createElement('p');p.textContent='請先選擇一本已發布刊物，測試獨立閱讀頁，並複製校網 HTML 嵌入碼。此頁不會更動原本的書櫃。';wrap.appendChild(p);
  if(!items.length){const msg=document.createElement('div');msg.className='catalog-message';msg.textContent='公開 API 未回傳已發布刊物。請先檢查 API 的部署與發布狀態。';wrap.appendChild(msg)}
  for(const item of items){const line=document.createElement('div');line.className='entry';const info=document.createElement('div');const name=document.createElement('strong');name.textContent=item.title||'未命名刊物';info.appendChild(name);const meta=document.createElement('small');meta.textContent=(item.category||'刊物')+' · '+(item.mode==='document'?'PDF 文件':item.mode==='link'?'外部連結':'翻頁書');info.appendChild(meta);line.appendChild(info);
