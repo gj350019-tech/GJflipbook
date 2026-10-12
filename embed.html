@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>格致數位閱讀館｜單本閱讀</title><style>html,body{height:100%;margin:0;overflow:hidden;background:#101b27}iframe{border:0;width:100%;height:100%;display:block}</style></head>
+<body><iframe id="singleBook" title="格致電子刊物翻頁閱讀器" allow="fullscreen" allowfullscreen></iframe>
+<script>
+  const id=new URLSearchParams(location.search).get('id');
+  if(!id){document.body.innerHTML='<p style="font:16px system-ui;color:white;text-align:center;padding:50px">缺少刊物 ID，請由閱讀館點選「嵌入分享」。</p>'}
+  else document.getElementById('singleBook').src='index.html?embed='+encodeURIComponent(id);
+</script></body></html>
